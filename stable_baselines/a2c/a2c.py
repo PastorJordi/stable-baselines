@@ -47,12 +47,13 @@ class A2C(ActorCriticRLModel):
     def __init__(self, policy, env, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', verbose=0,
                  tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None):
+                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None, savpath=None):
 
         super(A2C, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                   _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
                                   seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
+        self.savpath = savpath
         self.n_steps = n_steps
         self.gamma = gamma
         self.vf_coef = vf_coef
@@ -227,6 +228,11 @@ class A2C(ActorCriticRLModel):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
+        if self.savpath is not None:
+            rewardlist = []
+            obslist = []
+            actionlist = []
+
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
             self._setup_learn()
@@ -238,6 +244,11 @@ class A2C(ActorCriticRLModel):
             for update in range(1, total_timesteps // self.n_batch + 1):
                 # true_reward is the reward without discount
                 obs, states, rewards, masks, actions, values, ep_infos, true_reward = runner.run()
+                if self.savpath is not None:
+                    rewardlist += [true_reward]
+                    obslist += [obs]
+                    actionlist += [actions]
+                
                 self.ep_info_buf.extend(ep_infos)
                 _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values,
                                                                  self.num_timesteps // self.n_batch, writer)
@@ -270,6 +281,13 @@ class A2C(ActorCriticRLModel):
                         logger.logkv('ep_reward_mean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
                         logger.logkv('ep_len_mean', safe_mean([ep_info['l'] for ep_info in self.ep_info_buf]))
                     logger.dump_tabular()
+
+            if self.savpath is not None:
+                np.savez_compressed(self.savpath,
+                    rewards=rewardlist,
+                    observations=obslist,
+                    actions=actionlist
+                )
 
         return self
 

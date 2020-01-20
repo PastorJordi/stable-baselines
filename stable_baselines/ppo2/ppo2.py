@@ -51,12 +51,13 @@ class PPO2(ActorCriticRLModel):
     def __init__(self, policy, env, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4, vf_coef=0.5,
                  max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2, cliprange_vf=None,
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None):
+                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None, savpath=None):
 
         super(PPO2, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                    _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
                                    seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
+        self.savpath=savpath
         self.learning_rate = learning_rate
         self.cliprange = cliprange
         self.cliprange_vf = cliprange_vf
@@ -309,6 +310,11 @@ class PPO2(ActorCriticRLModel):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
+        if self.savpath is not None:
+            rewardlist = []
+            obslist = []
+            actionlist = []
+
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
             self._setup_learn()
@@ -332,6 +338,12 @@ class PPO2(ActorCriticRLModel):
                 cliprange_vf_now = cliprange_vf(frac)
                 # true_reward is the reward without discount
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+
+                if self.savpath is not None:
+                    rewardlist += [true_reward]
+                    obslist += [obs]
+                    actionlist += [actions]
+
                 self.num_timesteps += self.n_batch
                 self.ep_info_buf.extend(ep_infos)
                 mb_loss_vals = []
@@ -398,6 +410,13 @@ class PPO2(ActorCriticRLModel):
                     # compatibility with callbacks that have no return statement.
                     if callback(locals(), globals()) is False:
                         break
+                
+                if self.savpath is not None:
+                    np.savez_compressed(self.savpath,
+                        rewards=rewardlist,
+                        observations=obslist,
+                        actions=actionlist
+                    )
 
             return self
 

@@ -110,12 +110,13 @@ class ACER(ActorCriticRLModel):
                  replay_ratio=4, replay_start=1000, correction_term=10.0, trust_region=True,
                  alpha=0.99, delta=1, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=1):
+                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=1, savpath=None):
 
         super(ACER, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                    _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
                                    seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
+        self.savpath = savpath
         self.n_steps = n_steps
         self.replay_ratio = replay_ratio
         self.buffer_size = buffer_size
@@ -477,6 +478,11 @@ class ACER(ActorCriticRLModel):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
+        if self.savpath is not None:
+            rewardlist = []
+            obslist = []
+            actionlist = []
+
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
             self._setup_learn()
@@ -497,6 +503,11 @@ class ACER(ActorCriticRLModel):
             # n_batch samples, 1 on_policy call and multiple off-policy calls
             for steps in range(0, total_timesteps, self.n_batch):
                 enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
+                if self.savpath is not None:
+                    rewardlist += [rewards]
+                    obslist += [obs]
+                    actionlist += [actions]
+
                 episode_stats.feed(rewards, dones)
 
                 if buffer is not None:
@@ -557,6 +568,13 @@ class ACER(ActorCriticRLModel):
                                          self.num_timesteps)
 
                 self.num_timesteps += self.n_batch
+            
+            if self.savpath is not None:
+                np.savez_compressed(self.savpath,
+                    rewards=rewardlist,
+                    observations=obslist,
+                    actions=actionlist
+                )
 
         return self
 
